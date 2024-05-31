@@ -3,7 +3,22 @@ const app = express()
 const bodyParser = require('body-parser')
 const cors = require('cors')
 require('dotenv').config()
+const mongoose = require('mongoose')
 
+mongoose.connect(process.env.MONGO_URI).catch((err) => console.log(err))
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true
+  },
+  log: [{
+    description: String,
+    duration: Number,
+    date: String
+  }]
+})
+
+let User = new mongoose.model("User", userSchema);
 app.use(cors())
 app.use(express.static('public'))
 app.use(bodyParser.urlencoded({extended: false}))
@@ -12,90 +27,93 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 
-let users = [{
-  username: 'fcc_test',
-  _id: 0,
-  log: [{
-    description: "test",
-    duration: 60,
-    date: "Fri May 31 2024"
-  }]
-}];
-
-let count = 1;
-
-app.post("/api/users", (req, res) => {
+app.post("/api/users", async (req, res) => {
+  const user = await User.create({
+    username: req.body.username
+  })
   const obj = {
-    username: req.body.username,
-    _id: count++
+  username: user.username,
+  _id: user._id
   }
-  users.push(obj);
-  
   res.json(obj);
 })
 
-app.get("/api/users", (req, res) => {
-  const getUsers = users.map( user => ({
-    _id: user._id,
-    username: user.username
-  }))
+app.get("/api/users", async (req, res) => {
+  const getUsers = await User.find().select({log: 0, __v: 0})
   res.json(getUsers);
 })
 
-app.post("/api/users/:_id/exercises", (req, res) => {
-  console.log(req.body);
-  const p  = req.body;
-  let date = new Date;
-
-  // try {
-
-    const foundUser = users.find(i => i._id == req.params._id);
-    let obj = {
-      username: foundUser.username,
-      description: p.description,
-      duration: p.duration,
-      date: p.date.toDateString() || date.toDateString(),
-      _id: req.params._id
-    }
-    users.forEach((user) => {
-      if (user._id == req.params._id) {
-        if (user.log == undefined) {
-          user.log = []
-        }
-          user.log.push({
-          description: p.description,
-          duration: p.duration,
-          date: obj.date
-         })
-      }
+app.post("/api/users/:_id/exercises", async (req, res) => {
+  const description  = req.body.description;
+  const duration = parseInt(req.body.duration);
+  let date = new Date(req.body.date);
+  if(date == "Invalid Date") {
+    date = new Date;
+  }
+  date = date.toDateString();
+  let exercise = await User.updateOne({
+    _id: req.params._id},
+    {
+      $push: {log: {
+        description: description,
+        duration: duration,
+        date: date
+      }}
     })
+    
+    const user = await User.findById(req.params._id).select({log: 0, __v: 0});
 
+    const obj = {
+      username: user.username,
+      description: description,
+      duration: duration,
+      date: date,
+      _id: user._id
+    }
     res.json(obj);
-    console.log(obj)
-  // }
-  // catch (err) {
-  //   res.send(err)
-  // }
 })
 
 
-app.get("/api/users/:_id/logs", (req, res) => {
-  console.log(req.query);
-  try {
-
-    const user = users.find(i => i._id == req.params._id);
-    const log = {
-      username: user.username,
-      _id: user._id,
-      count: user.log.length,
-      log: user.log
+app.get("/api/users/:_id/logs", async (req, res) => {
+  
+  
+  const user = await User.findById(req.params._id).select({__v: 0, log: { _id: 0}});
+  const logLength = user.log.length;
+  if(req.query.from || req.query.to || req.query.limit ) {
+    const from = new Date (req.query.from);
+    const to = new Date(req.query.to);
+    // user.log = user.log.filter((item) => {
+    //   // if (new Date(item.date) >= from || new Date(item.date) <= to){
+    //   //   return item;
+    //   // }
+    //   // else
+    //    if(new Date(item.date) > from){
+    //     console.log('in from')
+    //     return item;
+    //   }
+    //   if(new Date(item.date) < to) {
+    //     console.log('in to')
+    //     return item;
+    //   }
+    // })
+    if(from != "Invalid Date"){
+      user.log = user.log.filter(item => new Date(item.date) > from)
     }
+    if(to != "Invalid Date") {
+      user.log = user.log.filter(item => new Date(item.date) < to)
+    }
+    if( req.query.limit) {
+      user.log = user.log.slice(0, req.query.limit)
+    }
+  }
+  const obj = {
+    username: user.username,
+    count: logLength,
+    _id: user._id,
+    log: user.log
+  }
+  res.json(obj)
     
-    res.json(log);
-  }
-  catch (err) {
-    res.json({error: 404});
-  }
 })
 
 
