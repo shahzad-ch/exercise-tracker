@@ -82,20 +82,6 @@ app.get("/api/users/:_id/logs", async (req, res) => {
   if(req.query.from || req.query.to || req.query.limit ) {
     const from = new Date (req.query.from);
     const to = new Date(req.query.to);
-    // user.log = user.log.filter((item) => {
-    //   // if (new Date(item.date) >= from || new Date(item.date) <= to){
-    //   //   return item;
-    //   // }
-    //   // else
-    //    if(new Date(item.date) > from){
-    //     console.log('in from')
-    //     return item;
-    //   }
-    //   if(new Date(item.date) < to) {
-    //     console.log('in to')
-    //     return item;
-    //   }
-    // })
     if(from != "Invalid Date"){
       user.log = user.log.filter(item => new Date(item.date) > from)
     }
